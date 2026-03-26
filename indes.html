@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Global Hangman 2-Player</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        #word-display { font-size: 2.5rem; letter-spacing: 8px; margin: 20px; color: #333; }
+        .kb-btn { margin: 3px; padding: 10px 15px; cursor: pointer; border: 1px solid #ddd; border-radius: 5px; }
+        .kb-btn:disabled { background: #eee; cursor: not-allowed; }
+        .status { font-weight: bold; margin: 15px; color: #e74c3c; }
+        #setup { margin-bottom: 20px; }
+        input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Remote Hangman</h2>
+    
+    <div id="setup">
+        <input type="password" id="wordInput" placeholder="Enter Secret Word">
+        <button onclick="setWord()">Send to Friend</button>
+    </div>
+
+    <div id="game-area">
+        <div id="word-display">_ _ _ _</div>
+        <div id="status-msg" class="status">Waiting for Player 1...</div>
+        <div id="keyboard"></div>
+    </div>
+    
+    <button onclick="resetGame()" style="margin-top:30px; font-size: 10px;">Clear Server Data</button>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+  // PASTE YOUR CONFIG HERE FROM FIREBASE CONSOLE
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const gameRef = ref(db, 'hangman_game');
+
+  // 1. SET WORD (Player 1)
+  window.setWord = function() {
+    const word = document.getElementById('wordInput').value.toUpperCase().trim();
+    if(!word) return alert("Enter a word!");
+    
+    set(gameRef, {
+        word: word,
+        guessed: "",
+        mistakes: 0,
+        status: "playing"
+    });
+    document.getElementById('wordInput').value = "";
+  };
+
+  // 2. LISTEN FOR UPDATES (Both Players)
+  onValue(gameRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    renderGame(data);
+  });
+
+  function renderGame(data) {
+    const display = data.word.split('').map(char => 
+        data.guessed.includes(char) ? char : "_"
+    ).join(' ');
+    
+    document.getElementById('word-display').innerText = display;
+    document.getElementById('status-msg').innerText = `Mistakes: ${data.mistakes} / 6`;
+
+    // Check Win/Loss
+    if (!display.includes('_')) document.getElementById('status-msg').innerText = "PLAYER 2 WINS!";
+    if (data.mistakes >= 6) document.getElementById('status-msg').innerText = "GAME OVER! Word was: " + data.word;
+
+    renderKeyboard(data);
+  }
+
+  function renderKeyboard(data) {
+    const kb = document.getElementById('keyboard');
+    kb.innerHTML = "";
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').forEach(letter => {
+        const btn = document.createElement('button');
+        btn.innerText = letter;
+        btn.className = "kb-btn";
+        if (data.guessed.includes(letter)) btn.disabled = true;
+        btn.onclick = () => makeGuess(letter, data);
+        kb.appendChild(btn);
+    });
+  }
+
+  // 3. MAKE GUESS (Player 2)
+  function makeGuess(letter, data) {
+    let newGuessed = data.guessed + letter;
+    let newMistakes = data.mistakes;
+    if (!data.word.includes(letter)) newMistakes++;
+
+    update(gameRef, {
+        guessed: newGuessed,
+        mistakes: newMistakes
+    });
+  }
+
+  window.resetGame = () => set(gameRef, null);
+
+</script>
+</body>
+</html>
